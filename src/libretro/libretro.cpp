@@ -19,6 +19,11 @@
 #include "screenlayout.h"
 #include "utils.h"
 
+#ifdef PORTANDROID
+#define DEBUG_LEVEL 1
+#include "emu_init.h"
+#endif
+
 char retro_base_directory[4096];
 static char retro_saves_directory[4096];
 
@@ -282,6 +287,57 @@ static void check_variables(bool init)
    {
       toggle_swap_screen = !strcmp(var.value, "Toggle");
    }
+
+#ifdef PORTANDROID
+	/* Toggle item from game menu */
+	var.key = "menuItemToggleLayout";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
+	{
+		printf_1("[%s] menuItemToggleLayout", __FUNCTION__);
+		switch(current_screen_layout){
+			case ScreenLayout::TopBottom:
+				layout = ScreenLayout::LeftRight;
+				break;
+			case ScreenLayout::BottomTop:
+				layout = ScreenLayout::RightLeft;
+				break;
+			case ScreenLayout::LeftRight:
+				layout = ScreenLayout::TopBottom;
+				break;
+			case ScreenLayout::RightLeft:
+				layout = ScreenLayout::BottomTop;
+				break;
+		}
+	}
+
+	var.key = "menuItemSwapScreen";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var))
+	{
+		printf_1("[%s] menuItemSwapScreen", __FUNCTION__);
+		switch(current_screen_layout){
+			case ScreenLayout::TopBottom:
+				layout = ScreenLayout::BottomTop;
+				break;
+			case ScreenLayout::BottomTop:
+				layout = ScreenLayout::TopBottom;
+				break;
+			case ScreenLayout::LeftRight:
+				layout = ScreenLayout::RightLeft;
+				break;
+			case ScreenLayout::RightLeft:
+				layout = ScreenLayout::LeftRight;
+				break;
+			case ScreenLayout::TopOnly:
+				layout = ScreenLayout::BottomOnly;
+				break;
+			case ScreenLayout::BottomOnly:
+				layout = ScreenLayout::TopOnly;
+				break;
+		}
+	}
+
+	/* Toggle Item from front-end   */
+#endif
 
 #ifdef HAVE_THREADS
    var.key = "melonds_threaded_renderer";
