@@ -71,7 +71,11 @@ constexpr T ExtractBit(const T src) noexcept
 ///
 /// @return The extracted bits.
 ///
+#ifdef PORTANDROID
+template <typename T, typename Result = std::make_unsigned<T>>
+#else
 template <typename T, typename Result = std::make_unsigned_t<T>>
+#endif
 constexpr Result ExtractBits(const T src, const size_t begin, const size_t end) noexcept
 {
   return static_cast<Result>(((static_cast<Result>(src) << ((BitSize<T>() - 1) - end)) >>
@@ -91,7 +95,11 @@ constexpr Result ExtractBits(const T src, const size_t begin, const size_t end) 
 ///
 /// @return The extracted bits.
 ///
+#ifdef PORTANDROID
+template <size_t begin, size_t end, typename T, typename Result = std::make_unsigned<T>>
+#else
 template <size_t begin, size_t end, typename T, typename Result = std::make_unsigned_t<T>>
+#endif
 constexpr Result ExtractBits(const T src) noexcept
 {
   static_assert(begin < end, "Beginning bit must be less than the ending bit.");
@@ -195,7 +203,11 @@ inline To BitCast(const From& source) noexcept
   static_assert(std::is_trivially_copyable<To>(),
                 "BitCast destination type must be trivially copyable.");
 
+#ifdef PORTANDROID
+  std::aligned_storage<sizeof(To), alignof(To)> storage;
+#else
   std::aligned_storage_t<sizeof(To), alignof(To)> storage;
+#endif
   std::memcpy(&storage, &source, sizeof(storage));
   return reinterpret_cast<To&>(storage);
 }

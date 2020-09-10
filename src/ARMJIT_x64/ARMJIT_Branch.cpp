@@ -145,11 +145,22 @@ void Compiler::Comp_JumpTo(Gen::X64Reg addr, bool restoreCPSR)
         XOR(32, R(ABI_PARAM3), R(ABI_PARAM3));
     else
         MOV(32, R(ABI_PARAM3), Imm32(true)); // what a waste
+#ifdef PORTANDROID
+    if (Num == 0){
+        void (__thiscall ARMv5::* pFunc)(u32, bool) = &ARMv5::JumpTo;
+        void* pPtr = (void*&) pFunc;
+        CALL(pPtr);
+    }else{
+        void (__thiscall ARMv4::* pFunc)(u32, bool) = &ARMv4::JumpTo;
+        void* pPtr = (void*&) pFunc;
+         CALL(pPtr);
+    }
+#else
     if (Num == 0)
         CALL((void*)&ARMv5::JumpTo);
     else
         CALL((void*)&ARMv4::JumpTo);
-
+#endif
     PopRegs(restoreCPSR);
 
     LoadCPSR();

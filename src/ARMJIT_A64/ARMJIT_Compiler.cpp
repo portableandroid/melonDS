@@ -138,9 +138,14 @@ void Compiler::A_Comp_MSR()
             MOV(X0, RCPU);
 
             PushRegs(true);
-
-            QuickCallFunction(X3, (void*)&ARM::UpdateMode);
-        
+#ifdef PORTANDROID
+            // get the pointer to the member function
+            void (__thiscall ARM::* pFunc)(u32, u32) = &ARM::UpdateMode;
+            void* pPtr = (void*&) pFunc;
+            QuickCallFunction(X3, pPtr);
+#else
+            QuickCallFunction(X3, (void *)&ARM::UpdateMode);
+#endif
             PopRegs(true);
         }
     }

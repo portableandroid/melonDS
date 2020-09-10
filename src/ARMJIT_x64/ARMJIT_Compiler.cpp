@@ -185,8 +185,13 @@ void Compiler::A_Comp_MSR()
             MOV(32, R(ABI_PARAM3), R(RCPSR));
             MOV(32, R(ABI_PARAM2), R(RSCRATCH3));
             MOV(64, R(ABI_PARAM1), R(RCPU));
+#ifdef PORTANDROID
+            void (__thiscall ARM::* pFunc)(u32, u32) = &ARM::UpdateMode;
+            void* pPtr = (void*&) pFunc;
+            CALL(pPtr);
+#else
             CALL((void*)&ARM::UpdateMode);
-
+#endif
             PopRegs(true);
         }
     }

@@ -24,6 +24,12 @@
 
 #include <malloc.h>
 
+#ifdef PORTANDROID
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <linux/ashmem.h>
+#include "emu_init.h"
+#endif
 /*
     We're handling fastmem here.
 
@@ -626,9 +632,16 @@ void Init()
     FastMem7Start = mmap(NULL, AddrSpaceSize, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
 
     MemoryBase = (u8*)mmap(NULL, MemoryTotalSize, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
-
+    #ifdef PORTANDROID
+    char file_name[512];
+    snprintf(file_name,512,"%s/%s",cb_data_dir,"melondsfastmem");
+    MemoryFile =  open(file_name, O_RDWR);
+    //ioctl(MemoryFile, ASHMEM_SET_NAME, "melondsfastmem");
+    //ioctl(MemoryFile, ASHMEM_SET_SIZE, MemoryTotalSize);
+    #else
     MemoryFile = memfd_create("melondsfastmem", 0);
     ftruncate(MemoryFile, MemoryTotalSize);
+    #endif
 
     NewSa.sa_flags = SA_SIGINFO;
     sigemptyset(&NewSa.sa_mask);
@@ -667,6 +680,10 @@ void DeInit()
 
     RemoveVectoredExceptionHandler(ExceptionHandlerHandle);
 #endif
+#ifdef PORTANDROID
+    close(MemoryFile);
+#endif
+
 }
 
 void Reset()
