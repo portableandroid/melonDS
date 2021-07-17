@@ -10,6 +10,7 @@
 #include "Config.h"
 #include "Platform.h"
 #include "NDS.h"
+#include "NDSCart_SRAMManager.h"
 #include "GPU.h"
 #include "SPU.h"
 #include "version.h"
@@ -21,6 +22,7 @@
 
 #ifdef PORTANDROID
 #define DEBUG_LEVEL 1
+#define _cb_type_lock_
 #include "emu_init.h"
 #endif
 
@@ -43,16 +45,18 @@ GPU::RenderSettings video_settings;
 
 bool enable_opengl = false;
 bool using_opengl = false;
+bool opengl_linear_filtering = false;
 bool refresh_opengl = true;
 bool swapped_screens = false;
 bool toggle_swap_screen = false;
 bool swap_screen_toggled = false;
 
+
 enum CurrentRenderer
 {
    None,
    Software,
-   OpenGL,
+   OpenGLRenderer,
 };
 
 static CurrentRenderer current_renderer = CurrentRenderer::None;
@@ -171,12 +175,15 @@ void retro_set_environment(retro_environment_t cb)
 #ifdef HAVE_OPENGL
       { "melonds_opengl_renderer", "OpenGL Renderer (Restart); disabled|enabled" },
       { "melonds_opengl_resolution", opengl_resolution.c_str() },
+      { "melonds_opengl_better_polygons", "OpenGL Improved polygon splitting; disabled|enabled" },
+      { "melonds_opengl_filtering", "OpenGL filtering; nearest|linear" },
 #endif
 #ifdef JIT_ENABLED
       { "melonds_jit_enable", "JIT Enable (Restart); enabled|disabled" },
       { "melonds_jit_block_size", jit_blocksize.c_str() },
       { "melonds_jit_branch_optimisations", "JIT Branch optimisations; enabled|disabled" },
       { "melonds_jit_literal_optimisations", "JIT Literal optimisations; enabled|disabled" },
+      { "melonds_jit_fast_memory", "JIT Fast memory; enabled|disabled" },
 #endif
       { 0, 0 }
    };
@@ -288,6 +295,31 @@ static void check_variables(bool init)
       toggle_swap_screen = !strcmp(var.value, "Toggle");
    }
 
+#ifdef HAVE_THREADS
+   var.key = "melonds_threaded_renderer";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "enabled"))
+         video_settings.Soft_Threaded = true;
+      else
+         video_settings.Soft_Threaded = false;
+   }
+#endif
+
+   var.key = "melonds_touch_mode";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      TouchMode new_touch_mode = TouchMode::Disabled;
+      if (!strcmp(var.value, "Mouse"))
+         new_touch_mode = TouchMode::Mouse;
+      else if (!strcmp(var.value, "Touch"))
+         new_touch_mode = TouchMode::Touch;
+      else if (!strcmp(var.value, "Joystick"))
+         new_touch_mode = TouchMode::Joystick;
+
+      input_state.current_touch_mode = new_touch_mode;
+   }
+
 #ifdef PORTANDROID
 	/* Toggle item from game menu */
 	var.key = "menuItemToggleLayout";
@@ -339,30 +371,6 @@ static void check_variables(bool init)
 	/* Toggle Item from front-end   */
 #endif
 
-#ifdef HAVE_THREADS
-   var.key = "melonds_threaded_renderer";
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      if (!strcmp(var.value, "enabled"))
-         video_settings.Soft_Threaded = true;
-      else
-         video_settings.Soft_Threaded = false;
-   }
-#endif
-
-   TouchMode new_touch_mode = TouchMode::Disabled;
-
-   var.key = "melonds_touch_mode";
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      if (!strcmp(var.value, "Mouse"))
-         new_touch_mode = TouchMode::Mouse;
-      else if (!strcmp(var.value, "Touch"))
-         new_touch_mode = TouchMode::Touch;
-      else if (!strcmp(var.value, "Joystick"))
-         new_touch_mode = TouchMode::Joystick;
-   }
-
 #ifdef HAVE_OPENGL
    bool gl_update = false;
 
@@ -377,7 +385,7 @@ static void check_variables(bool init)
       {
          bool use_opengl = !strcmp(var.value, "enabled");
 
-         if(!init && using_opengl) current_renderer = use_opengl ? CurrentRenderer::OpenGL : CurrentRenderer::Software;
+         if(!init && using_opengl) current_renderer = use_opengl ? CurrentRenderer::OpenGLRenderer : CurrentRenderer::Software;
 
          enable_opengl = use_opengl;
       }
@@ -400,6 +408,24 @@ static void check_variables(bool init)
    else
    {
       video_settings.GL_ScaleFactor = 1;
+   }
+
+   var.key = "melonds_opengl_better_polygons";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      bool enabled = !strcmp(var.value, "enabled");
+      gl_update |= enabled != video_settings.GL_BetterPolygons;
+
+      if (enabled)
+         video_settings.GL_BetterPolygons = true;
+      else
+         video_settings.GL_BetterPolygons = false;
+   }
+
+   var.key = "melonds_opengl_filtering";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      opengl_linear_filtering  = !strcmp(var.value, "linear");
    }
 
    if((using_opengl && gl_update) || layout != current_screen_layout)
@@ -439,9 +465,16 @@ static void check_variables(bool init)
       else
          Config::JIT_LiteralOptimisations = false;
    }
-#endif
 
-   input_state.current_touch_mode = new_touch_mode;
+   var.key = "melonds_jit_fast_memory";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "enabled"))
+         Config::JIT_FastMemory = true;
+      else
+         Config::JIT_FastMemory = false;
+   }
+#endif
 
    update_screenlayout(layout, &screen_layout_data, enable_opengl, swapped_screens);
 }
@@ -465,7 +498,7 @@ static void render_frame(void)
          if (enable_opengl && using_opengl)
          {
             // Try to initialize opengl, if it failed fallback to software
-            if (initialize_opengl()) current_renderer = CurrentRenderer::OpenGL;
+            if (initialize_opengl()) current_renderer = CurrentRenderer::OpenGLRenderer;
             else
             {
                using_opengl = false;
@@ -476,7 +509,6 @@ static void render_frame(void)
          {
             if(using_opengl) deinitialize_opengl_renderer();
 #endif
-            GPU::InitRenderer(false);
             current_renderer = CurrentRenderer::Software;
 #ifdef HAVE_OPENGL
          }
@@ -574,6 +606,8 @@ void retro_run(void)
       retro_get_system_av_info(&updated_av_info);
       environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &updated_av_info);
    }
+
+   NDSCart_SRAMManager::Flush();
 }
 
 bool retro_load_game(const struct retro_game_info *info)
@@ -593,7 +627,7 @@ bool retro_load_game(const struct retro_game_info *info)
    // Abort if there are any of the required roms are missing
    if(!missing_roms.empty())
    {
-      std::string msg = "Missing required bios/firmware in system directory: ";
+      std::string msg = "Missing bios/firmware in system directory. Using FreeBIOS.";
 
       int i = 0;
       int len = missing_roms.size();
@@ -607,13 +641,12 @@ bool retro_load_game(const struct retro_game_info *info)
       msg.append("\n");
 
       log_cb(RETRO_LOG_ERROR, msg.c_str());
-
-      return false;
    }
 
    strcpy(Config::BIOS7Path, "bios7.bin");
    strcpy(Config::BIOS9Path, "bios9.bin");
    strcpy(Config::FirmwarePath, "firmware.bin");
+   strcpy(Config::FirmwareUsername, "MelonDS");
 
    struct retro_input_descriptor desc[] = {
       { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,  "Left" },
@@ -646,6 +679,34 @@ bool retro_load_game(const struct retro_game_info *info)
       return false;
    }
 
+   unsigned language = RETRO_LANGUAGE_ENGLISH;
+   environ_cb(RETRO_ENVIRONMENT_GET_LANGUAGE, &language);
+   switch(language)
+   {
+     case RETRO_LANGUAGE_JAPANESE:
+       Config::FirmwareLanguage = 0;
+       break;
+
+     case RETRO_LANGUAGE_FRENCH:
+       Config::FirmwareLanguage = 2;
+       break;
+
+     case RETRO_LANGUAGE_GERMAN:
+       Config::FirmwareLanguage = 3;
+       break;
+
+     case RETRO_LANGUAGE_ITALIAN:
+       Config::FirmwareLanguage = 4;
+       break;
+
+     case RETRO_LANGUAGE_SPANISH:
+       Config::FirmwareLanguage = 5;
+       break;
+
+     default:
+       Config::FirmwareLanguage = 1; // English
+   }
+
    check_variables(true);
 
    // Initialize the opengl state if needed
@@ -663,6 +724,7 @@ bool retro_load_game(const struct retro_game_info *info)
    rom_path = std::string(info->path);
    save_path = std::string(retro_saves_directory) + std::string(1, PLATFORM_DIR_SEPERATOR) + std::string(game_name) + ".sav";
 
+   GPU::InitRenderer(false);
    GPU::SetRenderSettings(false, video_settings);
    NDS::SetConsoleType(0);
    NDS::LoadROM(rom_path.c_str(), save_path.c_str(), direct_boot);

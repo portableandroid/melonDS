@@ -19,6 +19,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <string>
+#include <algorithm>
 #include "Config.h"
 #include "NDS.h"
 #include "SPI.h"
@@ -88,46 +90,51 @@ void DeInit()
     if (Firmware) delete[] Firmware;
 }
 
-void Reset()
+u32 FixFirmwareLength(u32 originalLength)
 {
-    if (Firmware) delete[] Firmware;
-    Firmware = NULL;
-
-    if (NDS::ConsoleType == 1)
-        strncpy(FirmwarePath, Config::DSiFirmwarePath, 1023);
-    else
-        strncpy(FirmwarePath, Config::FirmwarePath, 1023);
-
-    FILE* f = Platform::OpenLocalFile(FirmwarePath, "rb");
-    if (!f)
+    if (originalLength != 0x20000 && originalLength != 0x40000 && originalLength != 0x80000)
     {
-        printf("Firmware not found\n");
-
-        // TODO: generate default firmware
-        return;
-    }
-
-    fseek(f, 0, SEEK_END);
-
-    FirmwareLength = (u32)ftell(f);
-    if (FirmwareLength != 0x20000 && FirmwareLength != 0x40000 && FirmwareLength != 0x80000)
-    {
-        printf("Bad firmware size %d, ", FirmwareLength);
+        printf("Bad firmware size %d, ", originalLength);
 
         // pick the nearest power-of-two length
-        FirmwareLength |= (FirmwareLength >> 1);
-        FirmwareLength |= (FirmwareLength >> 2);
-        FirmwareLength |= (FirmwareLength >> 4);
-        FirmwareLength |= (FirmwareLength >> 8);
-        FirmwareLength |= (FirmwareLength >> 16);
-        FirmwareLength++;
+        originalLength |= (originalLength >> 1);
+        originalLength |= (originalLength >> 2);
+        originalLength |= (originalLength >> 4);
+        originalLength |= (originalLength >> 8);
+        originalLength |= (originalLength >> 16);
+        originalLength++;
 
         // ensure it's a sane length
-        if (FirmwareLength > 0x80000) FirmwareLength = 0x80000;
-        else if (FirmwareLength < 0x20000) FirmwareLength = 0x20000;
+        if (originalLength > 0x80000) originalLength = 0x80000;
+        else if (originalLength < 0x20000) originalLength = 0x20000;
 
-        printf("assuming %d\n", FirmwareLength);
+        printf("assuming %d\n", originalLength);
     }
+    return originalLength;
+}
+
+void LoadDefaultFirmware()
+{
+    FirmwareLength = 0x20000;
+    Firmware = new u8[FirmwareLength];
+    memset(Firmware, 0xFF, FirmwareLength);
+    FirmwareMask = FirmwareLength - 1;
+
+    u32 userdata = 0x7FE00 & FirmwareMask;
+
+    memset(Firmware + userdata, 0, 0x74);
+
+    // user settings offset
+    *(u16*)&Firmware[0x20] = (FirmwareLength - 0x200) >> 3;
+
+    Firmware[userdata+0x00] = 5; // version
+}
+
+void LoadFirmwareFromFile(FILE* f)
+{
+    fseek(f, 0, SEEK_END);
+
+    FirmwareLength = FixFirmwareLength((u32)ftell(f));
 
     Firmware = new u8[FirmwareLength];
 
@@ -153,6 +160,54 @@ void Reset()
             fclose(f);
         }
     }
+}
+
+void LoadUserSettingsFromConfig() {
+    // setting up username
+    std::string username(Config::FirmwareUsername);
+    std::u16string u16Username(username.begin(), username.end());
+    size_t usernameLength = std::min(u16Username.length(), (size_t) 10);
+    memcpy(Firmware + UserSettings + 0x06, u16Username.data(), usernameLength * sizeof(char16_t));
+    Firmware[UserSettings+0x1A] = usernameLength;
+
+    // setting language
+    Firmware[UserSettings+0x64] = Config::FirmwareLanguage;
+
+    // setting up color
+    Firmware[UserSettings+0x02] = Config::FirmwareFavouriteColour;
+
+    // setting up birthday
+    Firmware[UserSettings+0x03] = Config::FirmwareBirthdayMonth;
+    Firmware[UserSettings+0x04] = Config::FirmwareBirthdayDay;
+
+    // setup message
+    std::string message(Config::FirmwareMessage);
+    std::u16string u16message(message.begin(), message.end());
+    size_t messageLength = std::min(u16message.length(), (size_t) 26);
+    memcpy(Firmware + UserSettings + 0x1C, u16message.data(), messageLength * sizeof(char16_t));
+    Firmware[UserSettings+0x50] = messageLength;
+}
+
+void Reset()
+{
+    if (Firmware) delete[] Firmware;
+    Firmware = NULL;
+
+    if (NDS::ConsoleType == 1)
+        strncpy(FirmwarePath, Config::DSiFirmwarePath, 1023);
+    else
+        strncpy(FirmwarePath, Config::FirmwarePath, 1023);
+
+    FILE* f = Platform::OpenLocalFile(FirmwarePath, "rb");
+    if (!f)
+    {
+        printf("Firmware not found generating default one.\n");
+        LoadDefaultFirmware();
+    }
+    else
+    {
+        LoadFirmwareFromFile(f);
+    }
 
     FirmwareMask = FirmwareLength - 1;
 
@@ -168,6 +223,9 @@ void Reset()
     // TODO evetually: do this in DSi mode
     if (NDS::ConsoleType == 0)
     {
+        if (!f || Config::FirmwareOverrideSettings)
+            LoadUserSettingsFromConfig();
+
         // fix touchscreen coords
         *(u16*)&Firmware[userdata+0x58] = 0;
         *(u16*)&Firmware[userdata+0x5A] = 0;

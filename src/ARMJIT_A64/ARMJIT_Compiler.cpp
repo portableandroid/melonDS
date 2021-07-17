@@ -1,5 +1,11 @@
+#include "ARMJIT_Compiler.h"
+
+#include "../ARMJIT_Internal.h"
+#include "../ARMInterpreter.h"
+#include "../Config.h"
+
 #ifdef __SWITCH__
-#include "../switch/compat_switch.h"
+#include <switch.h>
 
 extern char __start__;
 #else
@@ -7,13 +13,11 @@ extern char __start__;
 #include <unistd.h>
 #endif
 
-#include "ARMJIT_Compiler.h"
+#include <stdlib.h>
 
-#include "../ARMJIT_Internal.h"
-#include "../ARMInterpreter.h"
-#include "../Config.h"
-
-#include <malloc.h>
+#ifdef __APPLE__
+    #include <pthread.h>
+#endif
 
 using namespace Arm64Gen;
 
@@ -66,6 +70,11 @@ void Compiler::A_Comp_MRS()
     }
     else
         MOV(rd, RCPSR);
+}
+
+void UpdateModeTrampoline(ARM* arm, u32 oldmode, u32 newmode)
+{
+    arm->UpdateMode(oldmode, newmode);
 }
 
 void Compiler::A_Comp_MSR()
@@ -138,14 +147,9 @@ void Compiler::A_Comp_MSR()
             MOV(X0, RCPU);
 
             PushRegs(true);
-#ifdef PORTANDROID
-            // get the pointer to the member function
-            void (__thiscall ARM::* pFunc)(u32, u32) = &ARM::UpdateMode;
-            void* pPtr = (void*&) pFunc;
-            QuickCallFunction(X3, pPtr);
-#else
-            QuickCallFunction(X3, (void *)&ARM::UpdateMode);
-#endif
+
+            QuickCallFunction(X3, (void*)&UpdateModeTrampoline);
+        
             PopRegs(true);
         }
     }
@@ -174,20 +178,24 @@ void Compiler::PopRegs(bool saveHiRegs)
 {
     if (saveHiRegs)
     {
-        BitSet16 hiRegsLoaded(RegCache.LoadedRegs & 0x7F00);
+        if (!Thumb && CurInstr.Cond() != 0xE)
+        {
+            BitSet16 hiRegsLoaded(RegCache.LoadedRegs & 0x7F00);
 
-        for (int reg : hiRegsLoaded)
-            LoadReg(reg, RegCache.Mapping[reg]);
+            for (int reg : hiRegsLoaded)
+                LoadReg(reg, RegCache.Mapping[reg]);
+        }
     }
 }
 
 Compiler::Compiler()
 {
 #ifdef __SWITCH__
-    JitRWBase = memalign(0x1000, JitMemSize);
+    JitRWBase = aligned_alloc(0x1000, JitMemSize);
 
     JitRXStart = (u8*)&__start__ - JitMemSize - 0x1000;
-    JitRWStart = virtmemReserve(JitMemSize);
+    virtmemLock();
+    JitRWStart = virtmemFindAslr(JitMemSize, 0x1000);
     MemoryInfo info = {0};
     u32 pageInfo = {0};
     int i = 0;
@@ -214,13 +222,20 @@ Compiler::Compiler()
     succeded = R_SUCCEEDED(svcMapProcessMemory(JitRWStart, envGetOwnProcessHandle(), (u64)JitRXStart, JitMemSize));
     assert(succeded);
 
+    virtmemUnlock();
+
     SetCodeBase((u8*)JitRWStart, (u8*)JitRXStart);
     JitMemMainSize = JitMemSize;
 #else
     u64 pageSize = sysconf(_SC_PAGE_SIZE);
     u8* pageAligned = (u8*)(((u64)JitMem & ~(pageSize - 1)) + pageSize);
     u64 alignedSize = (((u64)JitMem + sizeof(JitMem)) & ~(pageSize - 1)) - (u64)pageAligned;
-    mprotect(pageAligned, alignedSize, PROT_EXEC | PROT_READ | PROT_WRITE);
+    #ifdef __APPLE__
+        pageAligned = (u8*)mmap(NULL, 1024*1024*16, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT,-1, 0);
+        pthread_jit_write_protect_np(false);
+    #else
+        mprotect(pageAligned, alignedSize, PROT_EXEC | PROT_READ | PROT_WRITE);
+    #endif
 
     SetCodeBase(pageAligned, pageAligned);
     JitMemMainSize = alignedSize;
@@ -323,9 +338,11 @@ Compiler::Compiler()
         {
             for (int size = 0; size < 3; size++)
             {
-                for (int reg = 0; reg < 8; reg++)
+                for (int reg = 0; reg < 32; reg++)
                 {
-                    ARM64Reg rdMapped = (ARM64Reg)(W19 + reg);
+                    if (!(reg == W4 || (reg >= W19 && reg <= W26)))
+                        continue;
+                    ARM64Reg rdMapped = (ARM64Reg)reg;
                     PatchedStoreFuncs[consoleType][num][size][reg] = GetRXPtr();
                     if (num == 0)
                     {
@@ -426,7 +443,6 @@ Compiler::~Compiler()
     {
         bool succeded = R_SUCCEEDED(svcUnmapProcessMemory(JitRWStart, envGetOwnProcessHandle(), (u64)JitRXStart, JitMemSize));
         assert(succeded);
-        virtmemFree(JitRWStart, JitMemSize);
         succeded = R_SUCCEEDED(svcUnmapProcessCodeMemory(envGetOwnProcessHandle(), (u64)JitRXStart, (u64)JitRWBase, JitMemSize));
         assert(succeded);
         free(JitRWBase);
@@ -709,7 +725,9 @@ JitBlockEntry Compiler::CompileBlock(ARM* cpu, bool thumb, FetchedInstr instrs[]
                 QuickCallFunction(X1, InterpretTHUMB[CurInstr.Info.Kind]);
             }
             else
+            {
                 (this->*comp)();
+            }
         }
         else
         {
@@ -725,10 +743,12 @@ JitBlockEntry Compiler::CompileBlock(ARM* cpu, bool thumb, FetchedInstr instrs[]
                 }
             }
             else if (cond == 0xF)
+            {
                 Comp_AddCycles_C();
+            }
             else
             {
-                IrregularCycles = false;
+                IrregularCycles = comp == NULL;
 
                 FixupBranch skipExecute;
                 if (cond < 0xE)
@@ -753,14 +773,17 @@ JitBlockEntry Compiler::CompileBlock(ARM* cpu, bool thumb, FetchedInstr instrs[]
                         FixupBranch skipNop = B();
                         SetJumpTarget(skipExecute);
 
-                        Comp_AddCycles_C();
+                        if (IrregularCycles)
+                            Comp_AddCycles_C(true);
 
                         Comp_BranchSpecialBehaviour(false);
 
                         SetJumpTarget(skipNop);
                     }
                     else
+                    {
                         SetJumpTarget(skipExecute);
+                    }
                 }
 
             }

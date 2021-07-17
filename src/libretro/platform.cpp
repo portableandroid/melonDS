@@ -33,9 +33,11 @@
 
 #include <streams/file_stream.h>
 #include <streams/file_stream_transforms.h>
+#include <retro_timers.h>
 
 #include "types.h"
 #include "utils.h"
+#include "Platform.h"
 
 extern char retro_base_directory[4096];
 
@@ -84,28 +86,33 @@ namespace Platform
        return;
    }
 
-   void Semaphore_Reset(void *sema)
+   void Semaphore_Reset(Semaphore *sema)
+   {
+   #ifdef HAVE_THREADS
+      while (ssem_get((ssem_t*)sema) > 0) {
+        ssem_trywait((ssem_t*)sema);
+      }
+   #endif
+   }
+
+   void Semaphore_Post(Semaphore *sema, int count)
+   {
+   #ifdef HAVE_THREADS
+       for (int i = 0; i < count; i++)
+      {
+         ssem_signal((ssem_t*)sema);
+      }
+   #endif
+   }
+
+   void Semaphore_Wait(Semaphore *sema)
    {
    #ifdef HAVE_THREADS
       ssem_wait((ssem_t*)sema);
    #endif
    }
 
-   void Semaphore_Post(void *sema)
-   {
-   #ifdef HAVE_THREADS
-      ssem_signal((ssem_t*)sema);
-   #endif
-   }
-
-   void Semaphore_Wait(void *sema)
-   {
-   #ifdef HAVE_THREADS
-      ssem_wait((ssem_t*)sema);
-   #endif
-   }
-
-   void Semaphore_Free(void *sema)
+   void Semaphore_Free(Semaphore *sema)
    {
    #ifdef HAVE_THREADS
       ssem_t *sem = (ssem_t*)sema;
@@ -114,31 +121,68 @@ namespace Platform
    #endif
    }
 
-   void *Semaphore_Create()
+   Semaphore *Semaphore_Create()
    {
    #ifdef HAVE_THREADS
       ssem_t *sem = ssem_new(0);
       if (sem)
-         return sem;
+         return (Semaphore*)sem;
    #endif
       return NULL;
    }
 
-   void Thread_Free(void *thread)
+   Mutex* Mutex_Create()
+   {
+      return (Mutex*)slock_new();
+   }
+
+   void Mutex_Free(Mutex* mutex)
+   {
+      slock_free((slock_t*)mutex);
+   }
+
+   void Mutex_Lock(Mutex* mutex)
+   {
+      slock_lock((slock_t*)mutex);
+   }
+
+   void Mutex_Unlock(Mutex* mutex)
+   {
+      slock_unlock((slock_t*)mutex);
+   }
+
+   bool Mutex_TryLock(Mutex* mutex)
+   {
+      slock_try_lock((slock_t*)mutex);
+      return true;
+   }
+
+   void Thread_Free(Thread *thread)
    {
    #if HAVE_THREADS
       sthread_detach((sthread_t*)thread);
    #endif
    }
 
-   void *Thread_Create(void (*func)())
+   struct ThreadData
+   {
+      std::function<void()> fn;
+   };
+
+   void function_trampoline(void* param) {
+      ThreadData* data = (ThreadData*)param;
+      data->fn();
+      delete data;
+   }
+
+   Thread *Thread_Create(std::function<void()> func)
    {
    #if HAVE_THREADS
-      return (void*)sthread_create((void(*)(void*))func, NULL);
+      return (Thread*) sthread_create(function_trampoline, new ThreadData{func});
    #endif
    }
 
-   void Thread_Wait(void *thread)
+   void Thread_Wait(Thread *thread)
    {
    #if HAVE_THREADS
       sthread_join((sthread_t*)thread);
@@ -348,4 +392,9 @@ namespace Platform
       return (void*)nullptr;
    }
 #endif
+
+   void Sleep(u64 usecs)
+   {
+      retro_sleep(usecs / 1000);
+   }
 };

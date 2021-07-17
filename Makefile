@@ -29,11 +29,19 @@ ifeq ($(shell uname -a),)
 else ifneq ($(findstring Darwin,$(shell uname -a)),)
 	system_platform = osx
 	arch = intel
+ifeq ($(shell uname -p),arm)
+	arch = arm
+endif
 ifeq ($(shell uname -p),powerpc)
 	arch = ppc
 endif
 else ifneq ($(findstring MINGW,$(shell uname -a)),)
 	system_platform = win
+endif
+
+# arch
+ifeq (,$(ARCH))
+   ARCH = $(shell uname -m)
 endif
 
 CORE_DIR    += ./src/libretro
@@ -52,21 +60,6 @@ ifneq ($(GIT_VERSION)," unknown")
    DEFINES += -DGIT_VERSION=\"$(GIT_VERSION)\"
 endif
 
-ifeq ($(ARCHFLAGS),)
-ifeq ($(archs),ppc)
-   ARCHFLAGS = -arch ppc -arch ppc64
-else
-   ARCHFLAGS = -arch i386 -arch x86_64
-endif
-endif
-
-ifeq ($(platform), osx)
-ifndef ($(NOUNIVERSAL))
-   CXXFLAGS += $(ARCHFLAGS)
-   LFLAGS += $(ARCHFLAGS)
-endif
-endif
-
 ifeq ($(STATIC_LINKING), 1)
 EXT := a
 endif
@@ -76,10 +69,18 @@ ifeq ($(platform), unix)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
-   LIBS +=-lpthread -lGL
-   HAVE_OPENGL=1
+   CFLAGS += -D_GNU_SOURCE
+   LIBS += -lpthread -lrt
    HAVE_THREADS=1
-   JIT_ARCH=x64
+   ifneq ($(filter $(ARCH),x86 x86_64),)
+     LIBS += -lGL
+     HAVE_OPENGL=1
+   endif
+   ifeq ($(ARCH),x86_64)
+      JIT_ARCH=x64
+   else ifeq ($(ARCH),arm64)
+      JIT_ARCH=aarch64
+   endif
 else ifeq ($(platform), linux-portable)
    TARGET := $(TARGET_NAME)_libretro.$(EXT)
    fpic := -fPIC -nostdlib
@@ -90,40 +91,72 @@ else ifneq (,$(findstring osx,$(platform)))
    TARGET := $(TARGET_NAME)_libretro.dylib
    fpic := -fPIC
    SHARED := -dynamiclib
-	#LIBS +=-lpthread
+   HAVE_THREADS=1
+
+   ifeq ($(CROSS_COMPILE),1)
+		TARGET_RULE   = -target $(LIBRETRO_APPLE_PLATFORM) -isysroot $(LIBRETRO_APPLE_ISYSROOT)
+		CFLAGS   += $(TARGET_RULE)
+		CPPFLAGS += $(TARGET_RULE)
+		CXXFLAGS += $(TARGET_RULE)
+		LDFLAGS  += $(TARGET_RULE)
+   endif
+
+ifeq ($(UNIVERSAL),1)
+ifeq ($(ARCHFLAGS),)
+   ARCHFLAGS = -arch i386 -arch x86_64
+ifeq ($(archs),arm)
+   ARCHFLAGS = -arch arm64
+endif
+ifeq ($(archs),ppc)
+   ARCHFLAGS = -arch ppc -arch ppc64
+endif
+endif
+
+endif
+   CFLAGS   += $(ARCHFLAGS)
+   CXXFLAGS += $(ARCHFLAGS)
+   LFLAGS   += $(ARCHFLAGS)
+
 else ifneq (,$(findstring ios,$(platform)))
    TARGET := $(TARGET_NAME)_libretro_ios.dylib
-	fpic := -fPIC
-	SHARED := -dynamiclib
-	#LIBS +=-lpthread
+   fpic := -fPIC
+   SHARED := -dynamiclib
+   HAVE_THREADS=1
+   DEFINES := -DIOS
+   MINVERSION=
 
 ifeq ($(IOSSDK),)
    IOSSDK := $(shell xcodebuild -version -sdk iphoneos Path)
 endif
 
-	DEFINES := -DIOS
-	ifeq ($(platform),ios-arm64)
-		CC = cc -arch arm64 -isysroot $(IOSSDK)
-	else
-		CC = cc -arch armv7 -isysroot $(IOSSDK)
-	endif
-ifeq ($(platform),$(filter $(platform),ios9 ios-arm64))
-CC     += -miphoneos-version-min=8.0
-CXXFLAGS += -miphoneos-version-min=8.0
+ifeq ($(platform),ios-arm64)
+   CC = cc -arch arm64 -isysroot $(IOSSDK)
+   CXX = c++ -arch arm64 -isysroot $(IOSSDK)
 else
-CC     += -miphoneos-version-min=5.0
-CXXFLAGS += -miphoneos-version-min=5.0
+   CC = cc -arch armv7 -isysroot $(IOSSDK)
+   CXX = c++ -arch armv7 -isysroot $(IOSSDK)
 endif
+ifeq ($(platform),$(filter $(platform),ios9 ios-arm64))
+   MINVERSION = -miphoneos-version-min=8.0
+else
+   MINVERSION = -miphoneos-version-min=5.0
+endif
+CFLAGS       += $(MINVERSION)
+CXXFLAGS     += $(MINVERSION)
 
 else ifeq ($(platform), tvos-arm64)
    TARGET := $(TARGET_NAME)_libretro_tvos.dylib
    fpic := -fPIC
    SHARED := -dynamiclib
+   HAVE_THREADS=1
    DEFINES := -DIOS
 
 ifeq ($(IOSSDK),)
    IOSSDK := $(shell xcodebuild -version -sdk appletvos Path)
 endif
+
+   CC = cc -arch arm64 -isysroot $(IOSSDK)
+   CXX = c++ -arch arm64 -isysroot $(IOSSDK)
 
 else ifneq (,$(findstring qnx,$(platform)))
 	TARGET := $(TARGET_NAME)_libretro_qnx.so
@@ -186,8 +219,73 @@ else ifeq ($(platform), libnx)
    HAVE_OPENGL = 1
    HAVE_THREADS = 1
    HAVE_NEON = 1
-   JIT_ARCH = aarch64
+   #JIT_ARCH = aarch64 # TODO: Re-add when armjit memory problems are fixed upstream
 #######################################
+
+# RPi4
+else ifeq ($(platform), rpi4_64)
+   EXT ?= so
+   CPUFLAGS += -march=armv8-a+crc -mtune=cortex-a72
+   HAVE_NEON = 1
+   TARGET := $(TARGET_NAME)_libretro.$(EXT)
+   fpic := -fPIC
+   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
+   LIBS += -lpthread -lGLESv2
+   HAVE_OPENGLES3 = 1
+   HAVE_THREADS = 1
+   JIT_ARCH = aarch64
+   
+# Odroid C4
+else ifeq ($(platform), odroidc4)
+   EXT ?= so
+   CPUFLAGS += -mcpu=cortex-a55 -mtune=cortex-a55
+   HAVE_NEON = 1
+   TARGET := $(TARGET_NAME)_libretro.$(EXT)
+   fpic := -fPIC
+   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
+   LIBS += -lpthread -lGLESv2
+   HAVE_OPENGLES3 = 1
+   HAVE_THREADS = 1
+   JIT_ARCH = aarch64
+
+# Odroid Go Advance
+else ifeq ($(platform), odroidgoa)
+   EXT ?= so
+   CPUFLAGS += -mcpu=cortex-a35 -mtune=cortex-a35
+   HAVE_NEON = 1
+   TARGET := $(TARGET_NAME)_libretro.$(EXT)
+   fpic := -fPIC
+   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
+   LIBS += -lpthread -lGLESv2
+   HAVE_OPENGLES3 = 1
+   HAVE_THREADS = 1
+   JIT_ARCH = aarch64
+
+# Odroid N2 / VIM3
+else ifeq ($(platform), odroidn2)
+   EXT ?= so
+   CPUFLAGS += -mcpu=cortex-a73 -mtune=cortex-a73.cortex-a53
+   HAVE_NEON = 1
+   TARGET := $(TARGET_NAME)_libretro.$(EXT)
+   fpic := -fPIC
+   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
+   LIBS += -lpthread -lGLESv2
+   HAVE_OPENGLES3 = 1
+   HAVE_THREADS = 1
+   JIT_ARCH = aarch64
+   
+# Orange Pi Zero 2
+else ifeq ($(platform), orangepizero2)
+   EXT ?= so
+   CPUFLAGS += -mcpu=cortex-a53 -mtune=cortex-a53
+   HAVE_NEON = 1
+   TARGET := $(TARGET_NAME)_libretro.$(EXT)
+   fpic := -fPIC
+   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
+   LIBS += -lpthread -lGLESv2
+   HAVE_OPENGLES3 = 1
+   HAVE_THREADS = 1
+   JIT_ARCH = aarch64
 
 # Windows MSVC 2017 all architectures
 else ifneq (,$(findstring windows_msvc2017,$(platform)))
@@ -331,23 +429,27 @@ else
    CC ?= gcc
    TARGET := $(TARGET_NAME)_libretro.dll
    SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
-   LDFLAGS += -lws2_32 -lwinmm
+   LDFLAGS += -lws2_32 -lwinmm -lopengl32
+   HAVE_OPENGL=1
+   HAVE_THREADS=1
 
    ifeq ($(MSYSTEM),MINGW64)
-   	  CC = x86_64-w64-mingw32-gcc
-      CXX = x86_64-w64-mingw32-g++
-	  LDFLAGS += -lopengl32
-	  ASFLAGS += -DWIN64
-      HAVE_OPENGL=1
-	  HAVE_THREADS=1
-	  JIT_ARCH=x64
+      CC ?= x86_64-w64-mingw32-gcc
+      CXX ?= x86_64-w64-mingw32-g++
+      ASFLAGS += -DWIN64
+      JIT_ARCH=x64
+   else ifeq ($(MSYSTEM),MINGW64)
+      CC ?= i686-w64-mingw32-gcc
+      CXX ?= i686-w64-mingw32-g++
    endif
 endif
 
 ifneq (,$(findstring msvc,$(platform)))
 CFLAGS += -D_CRT_SECURE_NO_WARNINGS
 CXXFLAGS += -D_CRT_SECURE_NO_WARNINGS
-JIT_ARCH=x64
+   ifeq ($(ARCH),x86_64)
+      JIT_ARCH=x64
+   endif
 endif
 
 ifeq ($(DEBUG), 1)
@@ -358,7 +460,7 @@ endif
 
 include Makefile.common
 
-OBJECTS := $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o) $(SOURCES_S:.s=.o)
+OBJECTS := $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o) $(SOURCES_S:.S=.o)
 
 CXXFLAGS += -std=gnu++14
 
@@ -399,13 +501,11 @@ endif
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	@echo "** BUILDING $(TARGET) FOR PLATFORM $(platform) **"
 ifeq ($(STATIC_LINKING), 1)
 	$(AR) rcs $@ $(OBJECTS)
 else
 	$(LD) $(fpic) $(SHARED) $(INCLUDES) $(LINKOUT)$@ $(OBJECTS) $(LDFLAGS) $(LIBS)
 endif
-	@echo "** BUILD SUCCESSFUL! GG NO RE **"
 
 %.o: %.c
 	$(CC) $(CFLAGS) $(fpic) -c $(OBJOUT)$@ $<
@@ -413,7 +513,7 @@ endif
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) $(fpic) -c $(OBJOUT)$@ $<
 
-%.o: %.s
+%.o: %.S
 	$(CC) $(CFLAGS) $(fpic) -x assembler-with-cpp $(ASFLAGS) -c $(OBJOUT)$@ $<
 
 clean:

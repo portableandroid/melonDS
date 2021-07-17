@@ -130,6 +130,16 @@ void Compiler::Comp_JumpTo(u32 addr, bool forceNonConstantCycles)
         ADD(32, MDisp(RCPU, offsetof(ARM, Cycles)), Imm8(cycles));
 }
 
+void ARMv4JumpToTrampoline(ARMv4* arm, u32 addr, bool restorecpsr)
+{
+    arm->JumpTo(addr, restorecpsr);
+}
+
+void ARMv5JumpToTrampoline(ARMv5* arm, u32 addr, bool restorecpsr)
+{
+    arm->JumpTo(addr, restorecpsr);
+}
+
 void Compiler::Comp_JumpTo(Gen::X64Reg addr, bool restoreCPSR)
 {
     IrregularCycles = true;
@@ -145,22 +155,11 @@ void Compiler::Comp_JumpTo(Gen::X64Reg addr, bool restoreCPSR)
         XOR(32, R(ABI_PARAM3), R(ABI_PARAM3));
     else
         MOV(32, R(ABI_PARAM3), Imm32(true)); // what a waste
-#ifdef PORTANDROID
-    if (Num == 0){
-        void (__thiscall ARMv5::* pFunc)(u32, bool) = &ARMv5::JumpTo;
-        void* pPtr = (void*&) pFunc;
-        CALL(pPtr);
-    }else{
-        void (__thiscall ARMv4::* pFunc)(u32, bool) = &ARMv4::JumpTo;
-        void* pPtr = (void*&) pFunc;
-         CALL(pPtr);
-    }
-#else
     if (Num == 0)
-        CALL((void*)&ARMv5::JumpTo);
+        CALL((void*)&ARMv5JumpToTrampoline);
     else
-        CALL((void*)&ARMv4::JumpTo);
-#endif
+        CALL((void*)&ARMv4JumpToTrampoline);
+
     PopRegs(restoreCPSR);
 
     LoadCPSR();
@@ -276,7 +275,7 @@ void Compiler::T_Comp_BL_Merged()
         target |= 1;
 
     MOV(32, MapReg(14), Imm32((R15 - 2) | 1));
-    
+
     Comp_JumpTo(target);
 }
 

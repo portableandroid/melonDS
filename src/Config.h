@@ -26,7 +26,7 @@
 namespace Config
 {
 
-typedef struct
+struct ConfigEntry
 {
     char Name[32];
     int Type;
@@ -34,8 +34,7 @@ typedef struct
     int DefaultInt;
     const char* DefaultStr;
     int StrLength; // should be set to actual array length minus one
-
-} ConfigEntry;
+};
 
 FILE* GetConfigFile(const char* fileName, const char* permissions);
 bool HasConfigFile(const char* fileName);
@@ -47,6 +46,14 @@ extern char BIOS7Path[1024];
 extern char FirmwarePath[1024];
 extern int DLDIEnable;
 extern char DLDISDPath[1024];
+
+extern char FirmwareUsername[64];
+extern int FirmwareLanguage;
+extern bool FirmwareOverrideSettings;
+extern int FirmwareBirthdayMonth;
+extern int FirmwareBirthdayDay;
+extern int FirmwareFavouriteColour;
+extern char FirmwareMessage[1024];
 
 extern char DSiBIOS9Path[1024];
 extern char DSiBIOS7Path[1024];

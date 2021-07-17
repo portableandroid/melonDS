@@ -1,6 +1,6 @@
 project(core)
 
-set (CMAKE_CXX_STANDARD 14)
+set (CMAKE_CXX_STANDARD 17)
 
 add_library(core STATIC
 	ARCodeFile.cpp
@@ -26,19 +26,17 @@ add_library(core STATIC
 	FIFO.h
 	GBACart.cpp
 	GPU.cpp
-	GPU_OpenGL.cpp
-	GPU_OpenGL_shaders.h
 	GPU2D.cpp
+	GPU2D_Soft.cpp
 	GPU3D.cpp
-	GPU3D_OpenGL.cpp
-	GPU3D_OpenGL_shaders.h
 	GPU3D_Soft.cpp
 	melonDLDI.h
 	NDS.cpp
 	NDSCart.cpp
-	OpenGLSupport.cpp
+	NDSCart_SRAMManager.cpp
 	Platform.h
 	ROMList.h
+	FreeBIOS.h
 	RTC.cpp
 	Savestate.cpp
 	SPI.cpp
@@ -51,6 +49,16 @@ add_library(core STATIC
 	tiny-AES-c/aes.c
 	xxhash/xxhash.c
 )
+
+if (ENABLE_OGLRENDERER)
+	target_sources(core PRIVATE
+		GPU_OpenGL.cpp
+		GPU_OpenGL_shaders.h
+		GPU3D_OpenGL.cpp
+		GPU3D_OpenGL_shaders.h
+		OpenGLSupport.cpp
+	)
+endif()
 
 if (ENABLE_JIT)
 	enable_language(ASM)
@@ -75,9 +83,8 @@ if (ENABLE_JIT)
 			ARMJIT_x64/ARMJIT_LoadStore.cpp
 			ARMJIT_x64/ARMJIT_Branch.cpp
 
-			ARMJIT_x64/ARMJIT_Linkage.s
+			ARMJIT_x64/ARMJIT_Linkage.S
 		)
-		set_source_files_properties(ARMJIT_x64/ARMJIT_Linkage.s PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
 	endif()
 	if (ARCHITECTURE STREQUAL ARM64)
 		target_sources(core PRIVATE
@@ -89,14 +96,32 @@ if (ENABLE_JIT)
 			ARMJIT_A64/ARMJIT_LoadStore.cpp
 			ARMJIT_A64/ARMJIT_Branch.cpp
 
-			ARMJIT_A64/ARMJIT_Linkage.s
+			ARMJIT_A64/ARMJIT_Linkage.S
 		)
-		set_source_files_properties(ARMJIT_A64/ARMJIT_Linkage.s PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
 	endif()
 endif()
 
-if (WIN32)
-	target_link_libraries(core ole32 comctl32 ws2_32 opengl32)
+if (APPLE)
+        target_include_directories(core PUBLIC /usr/local/include /opt/homebrew/include)
+        target_link_directories(core PUBLIC /usr/local/lib /opt/homebrew/lib)
+endif()
+
+if (ENABLE_OGLRENDERER)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(EPOXY REQUIRED epoxy)
+
+    target_include_directories(core PRIVATE ${EPOXY_INCLUDE_DIRS})
+    if (WIN32)
+        target_link_libraries(core ole32 comctl32 ws2_32 ${EPOXY_LIBRARIES})
+    elseif (APPLE)
+        target_link_libraries(core ${EPOXY_LIBRARIES})
+    else()
+        target_link_libraries(core rt ${EPOXY_LIBRARIES})
+    endif()
 else()
-	target_link_libraries(core GL EGL)
+	if (WIN32)
+		target_link_libraries(core ole32 comctl32 ws2_32)
+	else()
+		target_link_libraries(core rt)
+	endif()
 endif()

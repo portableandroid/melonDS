@@ -50,6 +50,10 @@ VideoSettingsDialog::VideoSettingsDialog(QWidget* parent) : QDialog(parent), ui(
     connect(grp3DRenderer, SIGNAL(buttonClicked(int)), this, SLOT(onChange3DRenderer(int)));
     grp3DRenderer->button(Config::_3DRenderer)->setChecked(true);
 
+#ifndef OGLRENDERER_ENABLED
+    ui->rb3DOpenGL->setEnabled(false);
+#endif
+
     ui->cbGLDisplay->setChecked(Config::ScreenUseGL != 0);
 
     ui->cbVSync->setChecked(Config::ScreenVSync != 0);
@@ -80,6 +84,14 @@ VideoSettingsDialog::VideoSettingsDialog(QWidget* parent) : QDialog(parent), ui(
         ui->cbxGLResolution->setEnabled(true);
         ui->cbBetterPolygons->setEnabled(true);
     }
+
+    // sorry
+    ui->cbVSync->hide();
+    ui->cbVSync->setEnabled(false);
+    ui->sbVSyncInterval->hide();
+    ui->sbVSyncInterval->setEnabled(false);
+    ui->label_2->hide();
+    ui->groupBox->layout()->addItem(new QSpacerItem(1, 1, QSizePolicy::Minimum, QSizePolicy::Expanding));
 }
 
 VideoSettingsDialog::~VideoSettingsDialog()

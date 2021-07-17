@@ -34,6 +34,14 @@ char FirmwarePath[1024];
 int DLDIEnable;
 char DLDISDPath[1024];
 
+char FirmwareUsername[64];
+int FirmwareLanguage;
+bool FirmwareOverrideSettings;
+int FirmwareBirthdayMonth;
+int FirmwareBirthdayDay;
+int FirmwareFavouriteColour;
+char FirmwareMessage[1024];
+
 char DSiBIOS9Path[1024];
 char DSiBIOS7Path[1024];
 char DSiFirmwarePath[1024];
@@ -46,7 +54,7 @@ int RandomizeMAC;
 #ifdef JIT_ENABLED
 int JIT_Enable = false;
 int JIT_MaxBlockSize = 32;
-int JIT_BranchOptimisations = 2;
+int JIT_BranchOptimisations = true;
 int JIT_LiteralOptimisations = true;
 int JIT_FastMemory = true;
 #endif
@@ -58,6 +66,14 @@ ConfigEntry ConfigFile[] =
     {"FirmwarePath", 1, FirmwarePath, 0, "", 1023},
     {"DLDIEnable", 0, &DLDIEnable, 0, NULL, 0},
     {"DLDISDPath", 1, DLDISDPath, 0, "", 1023},
+
+    {"FirmwareUsername", 1, FirmwareUsername, 0, "MelonDS", 63},
+    {"FirmwareLanguage", 0, &FirmwareLanguage, 1, NULL, 0},
+    {"FirmwareOverrideSettings", 0, &FirmwareOverrideSettings, false, NULL, 0},
+    {"FirmwareBirthdayMonth", 0, &FirmwareBirthdayMonth, 0, NULL, 0},
+    {"FirmwareBirthdayDay", 0, &FirmwareBirthdayDay, 0, NULL, 0},
+    {"FirmwareFavouriteColour", 0, &FirmwareFavouriteColour, 0, NULL, 0},
+    {"FirmwareMessage", 1, FirmwareMessage, 0, "", 1023},
 
     {"DSiBIOS9Path", 1, DSiBIOS9Path, 0, "", 1023},
     {"DSiBIOS7Path", 1, DSiBIOS7Path, 0, "", 1023},
@@ -71,9 +87,13 @@ ConfigEntry ConfigFile[] =
 #ifdef JIT_ENABLED
     {"JIT_Enable", 0, &JIT_Enable, 0, NULL, 0},
     {"JIT_MaxBlockSize", 0, &JIT_MaxBlockSize, 32, NULL, 0},
-    {"JIT_BranchOptimisations", 0, &JIT_BranchOptimisations, 2, NULL, 0},
+    {"JIT_BranchOptimisations", 0, &JIT_BranchOptimisations, 1, NULL, 0},
     {"JIT_LiteralOptimisations", 0, &JIT_LiteralOptimisations, 1, NULL, 0},
-    {"JIT_FastMemory", 0, &JIT_FastMemory, 1, NULL, 0},
+    #ifdef __APPLE__
+        {"JIT_FastMemory", 0, &JIT_FastMemory, 0, NULL, 0},
+    #else
+        {"JIT_FastMemory", 0, &JIT_FastMemory, 1, NULL, 0},
+    #endif
 #endif
 
     {"", -1, NULL, 0, NULL, 0}
@@ -169,7 +189,7 @@ void Save()
         if (entry->Type == 0)
             fprintf(f, "%s=%d\n", entry->Name, *(int*)entry->Value);
         else
-            fprintf(f, "%s=%s\n", entry->Name, entry->Value);
+            fprintf(f, "%s=%s\n", entry->Name, (char*)entry->Value);
 
         entry++;
     }
