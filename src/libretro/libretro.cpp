@@ -368,6 +368,13 @@ static void check_variables(bool init)
 		}
 	}
 
+    var.key = "menuItemMicInput";
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var)) {
+       s16 tmp[735];
+       for (int i = 0; i < 735; i++) tmp[i] = rand() & 0xFFFF;
+       NDS::MicInputFrame(tmp, 735);
+    }
+
 	/* Toggle Item from front-end   */
 #endif
 
