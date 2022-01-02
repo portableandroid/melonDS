@@ -23,6 +23,20 @@ enum ScreenLayout
    HybridBottom = 7,
 };
 
+enum SmallScreenLayout
+{
+    SmallScreenTop = 0,
+    SmallScreenBottom = 1,
+    SmallScreenDuplicate = 2
+};
+
+enum ScreenId
+{
+    Primary = 0,
+    Top = 1,
+    Bottom = 2,
+};
+
 struct ScreenLayoutData
 {
     bool enable_top_screen;
@@ -40,7 +54,11 @@ struct ScreenLayoutData
     unsigned touch_offset_x;
     unsigned touch_offset_y;
 
+    unsigned screen_gap_unscaled;
+    unsigned screen_gap;
+
     bool hybrid;
+    SmallScreenLayout hybrid_small_screen;
     unsigned hybrid_ratio;
 
     unsigned buffer_width;
@@ -57,4 +75,5 @@ extern GPU::RenderSettings video_settings;
 
 void initialize_screnlayout_data(ScreenLayoutData *data);
 void update_screenlayout(ScreenLayout layout, ScreenLayoutData *data, bool opengl, bool swap_screens);
+void clean_screenlayout_buffer(ScreenLayoutData *data);
 #endif

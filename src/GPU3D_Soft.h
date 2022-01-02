@@ -1,5 +1,5 @@
 /*
-    Copyright 2016-2020 Arisotura
+    Copyright 2016-2021 Arisotura
 
     This file is part of melonDS.
 
@@ -21,6 +21,7 @@
 #include "GPU3D.h"
 #include "Platform.h"
 #include <thread>
+#include <atomic>
 
 namespace GPU3D
 {
@@ -506,8 +507,8 @@ private:
 
     bool Threaded;
     Platform::Thread* RenderThread;
-    bool RenderThreadRunning;
-    bool RenderThreadRendering;
+    std::atomic_bool RenderThreadRunning;
+    std::atomic_bool RenderThreadRendering;
     Platform::Semaphore* Sema_RenderStart;
     Platform::Semaphore* Sema_RenderDone;
     Platform::Semaphore* Sema_ScanlineCount;

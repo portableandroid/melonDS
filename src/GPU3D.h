@@ -1,5 +1,5 @@
 /*
-    Copyright 2016-2020 Arisotura
+    Copyright 2016-2021 Arisotura
 
     This file is part of melonDS.
 
@@ -96,6 +96,8 @@ extern u16 RenderXPos;
 
 extern std::array<Polygon*,2048> RenderPolygonRAM;
 extern u32 RenderNumPolygons;
+
+extern bool AbortFrame;
 
 extern u64 Timestamp;
 

@@ -1,5 +1,5 @@
 /*
-    Copyright 2016-2020 Arisotura
+    Copyright 2016-2021 Arisotura
 
     This file is part of melonDS.
 
@@ -100,7 +100,7 @@ struct VRAMTrackingSet
 
     void Reset()
     {
-        for (int i = 0; i < Size / MappingGranularity; i++)
+        for (u32 i = 0; i < Size / MappingGranularity; i++)
         {
             // this is not a real VRAM bank
             // so it will always be a mismatch => the bank will be completely invalidated

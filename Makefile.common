@@ -1,4 +1,4 @@
-MELONDS_VERSION = "0.9.1"
+MELONDS_VERSION = "0.9.3"
 
 DEFINES += -DMELONDS_VERSION=\"$(MELONDS_VERSION)\"
 
@@ -7,7 +7,12 @@ INCFLAGS    := -I$(CORE_DIR)/libretro-common/include \
                -I$(MELON_DIR)
 
 SOURCES_C   := $(MELON_DIR)/xxhash/xxhash.c \
-               $(MELON_DIR)/tiny-AES-c/aes.c
+               $(MELON_DIR)/tiny-AES-c/aes.c \
+               $(MELON_DIR)/fatfs/diskio.c \
+               $(MELON_DIR)/fatfs/ff.c \
+               $(MELON_DIR)/fatfs/ffsystem.c \
+               $(MELON_DIR)/fatfs/ffunicode.c \
+               $(MELON_DIR)/sha1/sha1.c
 SOURCES_S   :=
 
 ifneq ($(STATIC_LINKING), 1)
@@ -26,6 +31,7 @@ endif
 
 SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
                     $(MELON_DIR)/AREngine.cpp \
+                    $(MELON_DIR)/ARCodeFile.cpp \
                     $(MELON_DIR)/ARM.cpp \
                     $(MELON_DIR)/ARMInterpreter.cpp \
                     $(MELON_DIR)/ARMInterpreter_ALU.cpp \
@@ -37,7 +43,9 @@ SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
                     $(MELON_DIR)/DSi.cpp \
                     $(MELON_DIR)/DSi_AES.cpp \
                     $(MELON_DIR)/DSi_Camera.cpp \
+                    $(MELON_DIR)/DSi_DSP.cpp \
                     $(MELON_DIR)/DSi_I2C.cpp \
+                    $(MELON_DIR)/DSi_NAND.cpp \
                     $(MELON_DIR)/DSi_NDMA.cpp \
                     $(MELON_DIR)/DSi_NWifi.cpp \
                     $(MELON_DIR)/DSi_SD.cpp \
@@ -57,12 +65,29 @@ SOURCES_CXX := $(MELON_DIR)/NDS.cpp \
                     $(MELON_DIR)/SPU.cpp \
                     $(MELON_DIR)/Wifi.cpp \
                     $(MELON_DIR)/WifiAP.cpp \
+                    $(MELON_DIR)/frontend/Util_ROM.cpp \
                     $(CORE_DIR)/config.cpp \
                     $(CORE_DIR)/input.cpp \
                     $(CORE_DIR)/libretro.cpp \
                     $(CORE_DIR)/platform.cpp \
                     $(CORE_DIR)/screenlayout.cpp \
                     $(CORE_DIR)/utils.cpp
+
+# Teakra
+SOURCES_CXX += $(MELON_DIR)/teakra/src/ahbm.cpp \
+                $(MELON_DIR)/teakra/src/apbp.cpp \
+                $(MELON_DIR)/teakra/src/btdmp.cpp \
+                $(MELON_DIR)/teakra/src/disassembler_c.cpp \
+                $(MELON_DIR)/teakra/src/disassembler.cpp \
+                $(MELON_DIR)/teakra/src/dma.cpp \
+                $(MELON_DIR)/teakra/src/memory_interface.cpp \
+                $(MELON_DIR)/teakra/src/mmio.cpp \
+                $(MELON_DIR)/teakra/src/parser.cpp \
+                $(MELON_DIR)/teakra/src/processor.cpp \
+                $(MELON_DIR)/teakra/src/teakra_c.cpp \
+                $(MELON_DIR)/teakra/src/teakra.cpp \
+                $(MELON_DIR)/teakra/src/timer.cpp
+INCFLAGS    += -I$(MELON_DIR)/teakra/include -I$(MELON_DIR)/teakra/src
 
 ifeq ($(HAVE_OPENGL), 1)
 SOURCES_C += $(CORE_DIR)/libretro-common/glsm/glsm.c \
@@ -81,6 +106,10 @@ ifeq ($(HAVE_THREADS), 1)
 SOURCES_C += $(CORE_DIR)/libretro-common/rthreads/rthreads.c \
              $(CORE_DIR)/libretro-common/rthreads/rsemaphore.c
 DEFINES += -DHAVE_THREADS
+endif
+
+ifeq ($(HAVE_WIFI), 1)
+DEFINES += -DHAVE_WIFI
 endif
 
 # TODO: re-add when neon is implemented upstream

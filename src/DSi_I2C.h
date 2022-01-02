@@ -1,5 +1,5 @@
 /*
-    Copyright 2016-2020 Arisotura
+    Copyright 2016-2021 Arisotura
 
     This file is part of melonDS.
 
@@ -18,6 +18,13 @@
 
 #ifndef DSI_I2C_H
 #define DSI_I2C_H
+
+namespace DSi_BPTWL
+{
+
+u8 GetBootFlag();
+
+}
 
 namespace DSi_I2C
 {

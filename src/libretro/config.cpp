@@ -59,6 +59,11 @@ namespace Config
     int JIT_Enable = false;
 #endif
 
+    int AudioBitrate = 0;
+    int AudioInterp = 0;
+    int ConsoleType = 0;
+    int DirectBoot = 0;
+
     ConfigEntry ConfigFile[] =
     {
 #ifdef JIT_ENABLED

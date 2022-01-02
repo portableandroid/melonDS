@@ -1,5 +1,5 @@
 /*
-    Copyright 2016-2020 Arisotura
+    Copyright 2016-2021 Arisotura
 
     This file is part of melonDS.
 
@@ -79,6 +79,11 @@ void DoSavestate(Savestate* file)
 
     file->Var16(&ConvResult);*/
     // TODO!!
+}
+
+void SetMode(u8 mode)
+{
+    TSCMode = mode;
 }
 
 void SetTouchCoords(u16 x, u16 y)

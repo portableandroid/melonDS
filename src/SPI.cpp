@@ -1,5 +1,5 @@
 /*
-    Copyright 2016-2020 Arisotura
+    Copyright 2016-2021 Arisotura
 
     This file is part of melonDS.
 
@@ -23,6 +23,7 @@
 #include <algorithm>
 #include "Config.h"
 #include "NDS.h"
+#include "DSi.h"
 #include "SPI.h"
 #include "DSi_SPI_TSC.h"
 #include "Platform.h"
@@ -220,8 +221,22 @@ void Reset()
 
     UserSettings = userdata;
 
-    // TODO evetually: do this in DSi mode
-    if (NDS::ConsoleType == 0)
+    // fix touchscreen coords
+    *(u16*)&Firmware[userdata+0x58] = 0;
+    *(u16*)&Firmware[userdata+0x5A] = 0;
+    Firmware[userdata+0x5C] = 0;
+    Firmware[userdata+0x5D] = 0;
+    *(u16*)&Firmware[userdata+0x5E] = 255<<4;
+    *(u16*)&Firmware[userdata+0x60] = 191<<4;
+    Firmware[userdata+0x62] = 255;
+    Firmware[userdata+0x63] = 191;
+
+    // disable autoboot
+    //Firmware[userdata+0x64] &= 0xBF;
+
+    *(u16*)&Firmware[userdata+0x72] = CRC16(&Firmware[userdata], 0x70, 0xFFFF);
+
+    if (Config::RandomizeMAC)
     {
         if (!f || Config::FirmwareOverrideSettings)
             LoadUserSettingsFromConfig();
@@ -289,16 +304,30 @@ void DoSavestate(Savestate* file)
     file->Var32(&Addr);
 }
 
-void SetupDirectBoot()
+void SetupDirectBoot(bool dsi)
 {
-    NDS::ARM9Write32(0x027FF864, 0);
-    NDS::ARM9Write32(0x027FF868, *(u16*)&Firmware[0x20] << 3);
+    if (dsi)
+    {
+        for (u32 i = 0; i < 6; i += 2)
+            DSi::ARM9Write16(0x02FFFCF4, *(u16*)&Firmware[0x36+i]); // MAC address
 
-    NDS::ARM9Write16(0x027FF874, *(u16*)&Firmware[0x26]);
-    NDS::ARM9Write16(0x027FF876, *(u16*)&Firmware[0x04]);
+        // checkme
+        DSi::ARM9Write16(0x02FFFCFA, *(u16*)&Firmware[0x3C]); // enabled channels
 
-    for (u32 i = 0; i < 0x70; i += 4)
-        NDS::ARM9Write32(0x027FFC80+i, *(u32*)&Firmware[UserSettings+i]);
+        for (u32 i = 0; i < 0x70; i += 4)
+            DSi::ARM9Write32(0x02FFFC80+i, *(u32*)&Firmware[UserSettings+i]);
+    }
+    else
+    {
+        NDS::ARM9Write32(0x027FF864, 0);
+        NDS::ARM9Write32(0x027FF868, *(u16*)&Firmware[0x20] << 3); // user settings offset
+
+        NDS::ARM9Write16(0x027FF874, *(u16*)&Firmware[0x26]); // CRC16 for data/gfx
+        NDS::ARM9Write16(0x027FF876, *(u16*)&Firmware[0x04]); // CRC16 for GUI/wifi code
+
+        for (u32 i = 0; i < 0x70; i += 4)
+            NDS::ARM9Write32(0x027FFC80+i, *(u32*)&Firmware[UserSettings+i]);
+    }
 }
 
 u8 GetConsoleType() { return Firmware[0x1D]; }

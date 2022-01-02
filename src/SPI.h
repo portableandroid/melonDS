@@ -1,5 +1,5 @@
 /*
-    Copyright 2016-2020 Arisotura
+    Copyright 2016-2021 Arisotura
 
     This file is part of melonDS.
 
@@ -24,7 +24,7 @@
 namespace SPI_Firmware
 {
 
-void SetupDirectBoot();
+void SetupDirectBoot(bool dsi);
 
 u32 FixFirmwareLength(u32 originalLength);
 

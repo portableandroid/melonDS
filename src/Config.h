@@ -1,5 +1,5 @@
 /*
-    Copyright 2016-2020 Arisotura
+    Copyright 2016-2021 Arisotura
 
     This file is part of melonDS.
 
@@ -63,6 +63,10 @@ extern int DSiSDEnable;
 extern char DSiSDPath[1024];
 
 extern int RandomizeMAC;
+extern int AudioBitrate;
+extern int AudioInterp;
+extern int ConsoleType;
+extern int DirectBoot;
 
 #ifdef JIT_ENABLED
 extern int JIT_Enable;

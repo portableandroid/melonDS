@@ -1,5 +1,5 @@
 /*
-    Copyright 2016-2020 Arisotura
+    Copyright 2016-2021 Arisotura
 
     This file is part of melonDS.
 
@@ -22,8 +22,12 @@
 #include <stdio.h>
 #include "types.h"
 
-#define SAVESTATE_MAJOR 7
-#define SAVESTATE_MINOR 1
+#define SAVESTATE_MAJOR 9
+#define SAVESTATE_MINOR 0
+
+#ifdef __LIBRETRO__
+#include <streams/memory_stream.h>
+#endif
 
 #ifdef __LIBRETRO__
 #include <streams/memory_stream.h>

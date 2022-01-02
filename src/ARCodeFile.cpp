@@ -1,5 +1,5 @@
 /*
-    Copyright 2016-2020 Arisotura
+    Copyright 2016-2021 Arisotura
 
     This file is part of melonDS.
 
@@ -21,6 +21,9 @@
 #include "ARCodeFile.h"
 #include "Platform.h"
 
+#ifdef HAVE_LIBNX
+#include <strings.h>
+#endif
 
 // TODO: import codes from other sources (usrcheat.dat, ...)
 // TODO: more user-friendly error reporting
@@ -60,7 +63,9 @@ bool ARCodeFile::Load()
     char linebuf[1024];
     while (!feof(f))
     {
-        fgets(linebuf, 1024, f);
+        if (fgets(linebuf, 1024, f) == nullptr)
+            break;
+
         linebuf[1023] = '\0';
 
         char* start = linebuf;
@@ -169,20 +174,20 @@ bool ARCodeFile::Save()
     {
         ARCodeCat& cat = *it;
 
-        if (it != Categories.begin()) fprintf(f, "\n");
-        fprintf(f, "CAT %s\n\n", cat.Name);
+        if (it != Categories.begin()) fprintf(f, "\r\n");
+        fprintf(f, "CAT %s\r\n\r\n", cat.Name);
 
         for (ARCodeList::iterator jt = cat.Codes.begin(); jt != cat.Codes.end(); jt++)
         {
             ARCode& code = *jt;
-            fprintf(f, "CODE %d %s\n", code.Enabled, code.Name);
+            fprintf(f, "CODE %d %s\r\n", code.Enabled, code.Name);
 
             for (u32 i = 0; i < code.CodeLen; i+=2)
             {
-                fprintf(f, "%08X %08X\n", code.Code[i], code.Code[i+1]);
+                fprintf(f, "%08X %08X\r\n", code.Code[i], code.Code[i+1]);
             }
 
-            fprintf(f, "\n");
+            fprintf(f, "\r\n");
         }
     }
 
