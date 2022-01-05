@@ -113,8 +113,9 @@ int ImportSRAM(const char* filename);
 
 // enable or disable cheats
 void EnableCheats(bool enable);
-
-
+#ifdef PORTANDROID
+void LoadCheats();
+#endif
 // setup the display layout based on the provided display size and parameters
 // * screenWidth/screenHeight: size of the host display
 // * screenLayout: how the DS screens are laid out

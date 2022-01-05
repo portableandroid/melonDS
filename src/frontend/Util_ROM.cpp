@@ -42,6 +42,7 @@
 #ifdef PORTANDROID
 extern const char *cb_dsi_bios_nand;
 extern const char *cb_dsi_bios_sd;
+extern char *melonds_cheat_file;
 #endif
 
 namespace Frontend
@@ -284,9 +285,16 @@ void LoadCheats()
     }
     else
     {
+#ifndef PORTANDROID
         strncpy(filename, "firmware.mch", 1023);
+#else
+        if(melonds_cheat_file) {
+            strncpy(filename, melonds_cheat_file, 1023);
+        }else{
+            strncpy(filename, "firmware.mch", 1023);
+        }
+#endif
     }
-
     // TODO: check for error (malformed cheat file, ...)
     CheatFile = new ARCodeFile(filename);
 
