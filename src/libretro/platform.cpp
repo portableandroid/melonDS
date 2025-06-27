@@ -36,7 +36,7 @@
 #define SO_REUSEADDR 0
 #define SO_BROADCAST 0
 #define socket(domain, type, protocol) NULL
-#define bind(sockfd, addr, addrlen) -1
+#define libretro_bind(sockfd, addr, addrlen) -1
 #define setsockopt(sockfd, level, optname, optval, optlen) -1
 #define sendto(sockfd, buf, len, flags, dest_addr, addrlen) 0
 #define recvfrom(sockfd, buf, len, flags, src_addr, addrlen) 0
@@ -250,7 +250,7 @@ namespace Platform
       saddr.sa_family = AF_INET;
       *(u32*)&saddr.sa_data[2] = htonl(INADDR_ANY);
       *(u16*)&saddr.sa_data[0] = htons(7064);
-      res = bind(MPSocket, &saddr, sizeof(sockaddr_t));
+      res = libretro_bind(MPSocket, &saddr, sizeof(sockaddr_t));
       if (res < 0)
       {
          closesocket(MPSocket);
