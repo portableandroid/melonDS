@@ -149,6 +149,7 @@ else
 endif
 CFLAGS       += $(MINVERSION)
 CXXFLAGS     += $(MINVERSION)
+LDFLAGS      += $(MINVERSION)
 
 else ifeq ($(platform), tvos-arm64)
    TARGET := $(TARGET_NAME)_libretro_tvos.dylib
@@ -163,6 +164,10 @@ endif
 
    CC = cc -arch arm64 -isysroot $(IOSSDK)
    CXX = c++ -arch arm64 -isysroot $(IOSSDK)
+   MINVERSION = -mappletvos-version-min=11.0
+   CFLAGS       += $(MINVERSION)
+   CXXFLAGS     += $(MINVERSION)
+   LDFLAGS      += $(MINVERSION)
 
 else ifneq (,$(findstring qnx,$(platform)))
 	TARGET := $(TARGET_NAME)_libretro_qnx.so
@@ -172,7 +177,7 @@ else ifneq (,$(findstring qnx,$(platform)))
 else ifeq ($(platform), emscripten)
    TARGET := $(TARGET_NAME)_libretro_emscripten.bc
    fpic := -fPIC
-   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined
+   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/link.T -Wl
 else ifeq ($(platform), vita)
    TARGET := $(TARGET_NAME)_vita.a
    CC = arm-vita-eabi-gcc
@@ -469,6 +474,14 @@ CXXFLAGS += -D_CRT_SECURE_NO_WARNINGS
    ifeq ($(ARCH),x86_64)
       JIT_ARCH=x64
    endif
+endif
+
+# webOS
+ifneq (,$(or $(findstring webos,$(CROSS_COMPILE)),$(findstring starfish,$(CROSS_COMPILE))))
+   LIBS += -lpthread -lGLESv2
+   HAVE_NEON = 1
+   HAVE_OPENGLES3 = 1
+   HAVE_THREADS = 1
 endif
 
 ifeq ($(DEBUG), 1)

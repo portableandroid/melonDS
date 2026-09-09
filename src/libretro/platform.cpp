@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #define socket_t    int
 #define sockaddr_t  struct sockaddr
 #define closesocket close
@@ -36,10 +37,12 @@
 #define SO_REUSEADDR 0
 #define SO_BROADCAST 0
 #define socket(domain, type, protocol) NULL
-#define libretro_bind(sockfd, addr, addrlen) -1
+#define bind_socket(sockfd, addr, addrlen) -1
 #define setsockopt(sockfd, level, optname, optval, optlen) -1
 #define sendto(sockfd, buf, len, flags, dest_addr, addrlen) 0
 #define recvfrom(sockfd, buf, len, flags, src_addr, addrlen) 0
+#else
+#define bind_socket(sockfd, addr, addrlen) bind(sockfd, addr, addrlen)
 #endif
 
 #ifdef HAVE_THREADS
@@ -250,7 +253,7 @@ namespace Platform
       saddr.sa_family = AF_INET;
       *(u32*)&saddr.sa_data[2] = htonl(INADDR_ANY);
       *(u16*)&saddr.sa_data[0] = htons(7064);
-      res = libretro_bind(MPSocket, &saddr, sizeof(sockaddr_t));
+      res = bind_socket(MPSocket, &saddr, sizeof(sockaddr_t));
       if (res < 0)
       {
          closesocket(MPSocket);
